@@ -102,7 +102,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gameframework-iOS-${{ matrix.build_type }}
-          path: build-ios/${{ matrix.build_type }}-iphoneos/libgameframework.a
+          # A glob, not a guessed exact path — CMake's Xcode generator nests
+          # product output under build-ios/build/<Config>-iphoneos/ (an
+          # extra "build/" segment the non-Xcode generators used elsewhere
+          # in this workflow don't have), confirmed by the first real run:
+          # the hardcoded build-ios/Release-iphoneos/libgameframework.a
+          # guess never matched, silently uploading nothing (a warning, not
+          # a failure, since if-no-files-found: warn — that's what let it
+          # slip through green).
+          path: build-ios/**/libgameframework.a
           if-no-files-found: warn
 
   # ── Android: cross-compile only via NDK, same reasoning as iOS above. ────
