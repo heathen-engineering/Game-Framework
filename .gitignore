@@ -1,0 +1,6 @@
+build/
+build-*/
+.idea/
+.vs/
+*.user
+CMakeUserPresets.json

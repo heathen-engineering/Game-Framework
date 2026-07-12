@@ -41,10 +41,16 @@ add_library(gameframework::gameframework ALIAS gameframework)
 # Shared library — for consumers that need a real runtime dependency (e.g. a
 # future C ABI layer for non-C++ hosts, matching DataLens's own
 # static+shared split).
+#
+# OUTPUT_NAME deliberately stays "gameframework_shared", NOT "gameframework"
+# — on Windows/MSVC, a DLL target also generates an import .lib alongside
+# the .dll (distinct from a .so's behavior on Linux/macOS, which needs no
+# such stub), so giving this the same base name as the STATIC target above
+# collides: both would try to produce gameframework.lib in the same output
+# directory ("ninja: error: multiple rules generate gameframework.lib").
 add_library(gameframework_shared SHARED $<TARGET_OBJECTS:gameframework_objects>)
 target_compile_definitions(gameframework_objects PRIVATE GAMEFRAMEWORK_BUILDING)
 set_target_properties(gameframework_shared PROPERTIES
-    OUTPUT_NAME gameframework
     POSITION_INDEPENDENT_CODE ON
 )
 add_library(gameframework::shared ALIAS gameframework_shared)
