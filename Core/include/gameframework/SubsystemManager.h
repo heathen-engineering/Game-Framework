@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <typeindex>
 #include <typeinfo>
@@ -85,11 +86,37 @@ public:
     /// matches the boot order once booted, registration order beforehand.
     Subsystem *get_global_subsystem_at(int index) const;
 
+    /// Registers a World-scoped subsystem TYPE (not an instance) — every
+    /// World gets its own freshly-constructed instance of every type
+    /// registered here, created/destroyed with that World. This is the
+    /// closest engine-agnostic equivalent to Unity's
+    /// SubsystemDiscovery.TypesForScope(SubsystemScope.World) reflection
+    /// scan: since C++ has no runtime type discovery, each consumer
+    /// explicitly registers the World-scope types it provides (typically
+    /// once, at the same startup point Global subsystems are registered).
+    template <typename T>
+    void register_world_subsystem_type()
+    {
+        register_world_subsystem_factory(
+            std::type_index(typeid(T)),
+            []() -> std::unique_ptr<Subsystem> { return std::make_unique<T>(); });
+    }
+
+    /// Internal — called by World::initialize() only. Constructs one fresh
+    /// instance of every registered World-scope type that should_create()s,
+    /// dependency-ordered (same DependencyOrder sort boot() uses, run
+    /// against this freshly-constructed set — each instance's own
+    /// depends_on() is what's actually consulted, not anything cached at
+    /// registration time).
+    std::vector<std::unique_ptr<Subsystem>> create_world_subsystems() const;
+
 private:
     SubsystemManager() = default;
     ~SubsystemManager();
     SubsystemManager(const SubsystemManager &) = delete;
     SubsystemManager &operator=(const SubsystemManager &) = delete;
+
+    void register_world_subsystem_factory(std::type_index type, std::function<std::unique_ptr<Subsystem>()> factory);
 
     struct Entry
     {
@@ -97,7 +124,14 @@ private:
         std::unique_ptr<Subsystem> subsystem;
     };
 
+    struct WorldFactoryEntry
+    {
+        std::type_index type;
+        std::function<std::unique_ptr<Subsystem>()> factory;
+    };
+
     std::vector<Entry> entries_;
+    std::vector<WorldFactoryEntry> world_factories_;
     bool booted_ = false;
 };
 

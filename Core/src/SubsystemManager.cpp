@@ -18,6 +18,7 @@
 #include "gameframework/SubsystemManager.h"
 
 #include "gameframework/DependencyOrder.h"
+#include "gameframework/WorldManagerSubsystem.h"
 
 namespace gameframework
 {
@@ -63,6 +64,17 @@ void SubsystemManager::boot()
 
     for (Entry &e : entries_)
         e.subsystem->do_initialize();
+
+    // Only after every other Global subsystem is up — matches
+    // Unity-Game-Framework's GameFramework.Boot() ordering guarantee, so
+    // World-scoped subsystems (created inside create_default_world()) can
+    // assume the whole Global layer already exists. WorldManagerSubsystem
+    // is an ordinary registered Subsystem like any other; this is the one
+    // deliberate, acceptable special-case in the boot sequence itself, not
+    // a special-cased WorldManagerSubsystem design (see that class's own
+    // header comment).
+    if (WorldManagerSubsystem *wm = get_global_subsystem<WorldManagerSubsystem>())
+        wm->create_default_world();
 }
 
 void SubsystemManager::shutdown()
@@ -95,6 +107,40 @@ Subsystem *SubsystemManager::get_global_subsystem_at(int index) const
     if (index < 0 || index >= int(entries_.size()))
         return nullptr;
     return entries_[size_t(index)].subsystem.get();
+}
+
+void SubsystemManager::register_world_subsystem_factory(std::type_index type, std::function<std::unique_ptr<Subsystem>()> factory)
+{
+    world_factories_.push_back(WorldFactoryEntry{type, std::move(factory)});
+}
+
+std::vector<std::unique_ptr<Subsystem>> SubsystemManager::create_world_subsystems() const
+{
+    struct Built
+    {
+        std::type_index type;
+        std::unique_ptr<Subsystem> subsystem;
+    };
+
+    std::vector<Built> built;
+    built.reserve(world_factories_.size());
+    for (const WorldFactoryEntry &f : world_factories_)
+    {
+        std::unique_ptr<Subsystem> sys = f.factory();
+        if (sys->should_create())
+            built.push_back(Built{f.type, std::move(sys)});
+    }
+
+    built = DependencyOrder::sort<Built>(
+        std::move(built),
+        [](const Built &b) { return b.type; },
+        [](const Built &b) { return b.subsystem->depends_on(); });
+
+    std::vector<std::unique_ptr<Subsystem>> result;
+    result.reserve(built.size());
+    for (Built &b : built)
+        result.push_back(std::move(b.subsystem));
+    return result;
 }
 
 } // namespace gameframework
