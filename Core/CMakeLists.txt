@@ -14,7 +14,10 @@ endif()
 
 set(GAMEFRAMEWORK_SOURCES
     src/DependencyOrder.cpp
+    src/GameMode.cpp
     src/SubsystemManager.cpp
+    src/World.cpp
+    src/WorldManagerSubsystem.cpp
 )
 
 # Each target compiles its own copy of the (tiny, currently 2-file) sources
