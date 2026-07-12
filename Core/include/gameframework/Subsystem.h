@@ -123,6 +123,13 @@ public:
     void set_world(World *w) { world_ = w; }
 
     // -- optional capabilities: default/empty, override only what you need.
+    /// Human-readable label for a dock/inspector view. Empty by design —
+    /// typeid(*this).name() is compiler-mangled and not a reasonable
+    /// fallback (differs across compilers, unreadable), so this stays a
+    /// deliberate opt-in rather than a guessed default; callers needing a
+    /// label for an unnamed subsystem should fall back to something of
+    /// their own (e.g. an index-based placeholder), not invent one here.
+    virtual std::string display_name() const { return {}; }
     // A (label, value) pair list for a debug/inspector view. --
     virtual std::vector<std::pair<std::string, std::string>> debug_info() const { return {}; }
     /// A list of human-readable health issue strings. Empty means healthy.
