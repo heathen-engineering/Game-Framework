@@ -1,0 +1,148 @@
+name: Build
+
+on:
+  push:
+    paths-ignore:
+      - '*.md'
+      - '.gitignore'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ── Desktop: native build + run the test suite ──────────────────────────
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Debug, Release]
+        config:
+          - { name: Linux, os: ubuntu-latest }
+          - { name: Windows, os: windows-latest }
+          - { name: macOS, os: macos-latest }
+
+    name: Desktop / ${{ matrix.config.name }} (${{ matrix.build_type }})
+    runs-on: ${{ matrix.config.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja (Linux)
+        if: matrix.config.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Install Ninja (macOS)
+        if: matrix.config.os == 'macos-latest'
+        run: brew install ninja
+
+      - name: Install Ninja (Windows)
+        if: matrix.config.os == 'windows-latest'
+        run: choco upgrade ninja
+
+      - name: Setup MSVC (Windows)
+        if: matrix.config.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure
+        shell: bash
+        run: cmake -S Core -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DGAMEFRAMEWORK_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gameframework-${{ matrix.config.name }}-${{ matrix.build_type }}
+          path: |
+            build/libgameframework.*
+            build/*.lib
+            build/*.dll
+            build/*.exp
+          if-no-files-found: warn
+
+  # ── iOS: cross-compile only (no on-runner execution — no device/simulator
+  # run wired up yet; revisit if/when Game Framework actually ships inside
+  # an iOS-targeted Godot/O3DE export and needs on-device validation). ──────
+  ios:
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Debug, Release]
+
+    name: iOS (${{ matrix.build_type }})
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure (device, arm64)
+        run: |
+          cmake -S Core -B build-ios -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DGAMEFRAMEWORK_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build-ios --config ${{ matrix.build_type }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gameframework-iOS-${{ matrix.build_type }}
+          path: build-ios/${{ matrix.build_type }}-iphoneos/libgameframework.a
+          if-no-files-found: warn
+
+  # ── Android: cross-compile only via NDK, same reasoning as iOS above. ────
+  android:
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Debug, Release]
+        abi: [arm64-v8a, armeabi-v7a, x86_64]
+
+    name: Android ${{ matrix.abi }} (${{ matrix.build_type }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Install Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27c
+
+      - name: Configure
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          cmake -S Core -B build-android-${{ matrix.abi }} -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=${{ matrix.abi }} \
+            -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DGAMEFRAMEWORK_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build-android-${{ matrix.abi }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gameframework-Android-${{ matrix.abi }}-${{ matrix.build_type }}
+          path: build-android-${{ matrix.abi }}/libgameframework.*
+          if-no-files-found: warn
