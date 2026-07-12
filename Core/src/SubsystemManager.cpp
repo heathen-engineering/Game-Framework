@@ -87,6 +87,13 @@ void SubsystemManager::shutdown()
         it->subsystem->do_deinitialize();
 }
 
+void SubsystemManager::release_all()
+{
+    shutdown();
+    entries_.clear();
+    world_factories_.clear();
+}
+
 int SubsystemManager::global_subsystem_count() const
 {
     return int(entries_.size());

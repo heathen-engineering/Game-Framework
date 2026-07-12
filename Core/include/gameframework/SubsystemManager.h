@@ -73,7 +73,40 @@ public:
     /// DependencyOrder.h). Idempotent; a second call is a no-op.
     void boot();
     /// Tears down every initialised Global subsystem in reverse boot order.
+    /// Does NOT destroy the registered instances or forget World-scope
+    /// factories — boot() can be called again afterwards to bring
+    /// everything back up in the same process. For host-application/engine
+    /// shutdown, where registered subsystems' owning modules may be about
+    /// to unload (e.g. a Godot GDExtension being dlclose'd), call
+    /// release_all() instead/as well — see its own doc comment.
     void shutdown();
+
+    /// Deinitializes (as shutdown() does) then actually destroys every
+    /// registered Global subsystem instance and forgets every registered
+    /// World-scope factory, instead of leaving them owned by this manager
+    /// until its own static-storage-duration destructor runs.
+    ///
+    /// This matters specifically for consumers where a registered
+    /// Subsystem's concrete type — and therefore its vtable — lives inside
+    /// a dynamically-loaded module that can be unloaded before this
+    /// process-wide singleton itself is destroyed (e.g. a Godot
+    /// GDExtension .so). Godot dlcloses every extension's library as part
+    /// of its own engine shutdown, which completes well before the C
+    /// runtime's atexit-driven static destructor chain runs at actual
+    /// process exit() — so if this singleton's own destructor is what
+    /// first tries to destroy those Subsystem instances, it does so
+    /// through an already-unloaded module's vtable. Confirmed with gdb:
+    /// SIGSEGV in Subsystem::do_deinitialize()/~Subsystem() called from
+    /// ~SubsystemManager() at libc exit(), on an instance registered by an
+    /// extension that had already been dlclose'd.
+    ///
+    /// Call this from the LAST extension's uninitialize callback that's
+    /// still guaranteed every registered subsystem's owning module is
+    /// still loaded — for the Godot integration, that's
+    /// Godot-Game-Framework's own uninitialize_foundation_gameframework_module(),
+    /// since Godot calls every extension's terminator before dlclose-ing
+    /// any of them.
+    void release_all();
 
     int global_subsystem_count() const;
     Subsystem *get_global_subsystem(std::type_index type) const;
