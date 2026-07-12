@@ -63,6 +63,23 @@ public:
 
     virtual ~Subsystem() = default;
 
+    // Deliberately non-copyable — a Subsystem is always singly-owned via
+    // unique_ptr (SubsystemManager/World never duplicate one), and staying
+    // explicit about it matters beyond style here: a user-declared
+    // destructor suppresses IMPLICIT move generation but NOT implicit copy
+    // generation, so without this, Subsystem (and every subclass, e.g.
+    // WorldManagerSubsystem, which owns a vector<unique_ptr<World>>) would
+    // still get an implicitly-generated copy constructor/assignment that
+    // tries to copy move-only members — compiles fine under some
+    // toolchains' lazier instantiation, hard-fails under MSVC's stricter
+    // one referencing unique_ptr's always-deleted copy-assignment (hit and
+    // fixed in this repo's CI: the actual error pointed at
+    // WorldManagerSubsystem.cpp/SubsystemManager.cpp, nowhere near the true
+    // cause here in the base class).
+    Subsystem(const Subsystem &) = delete;
+    Subsystem &operator=(const Subsystem &) = delete;
+    Subsystem() = default;
+
     /// Global unless overridden.
     virtual Scope scope() const { return Scope::Global; }
 

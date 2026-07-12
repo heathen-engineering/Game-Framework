@@ -53,7 +53,19 @@ void WorldManagerSubsystem::destroy(World *world)
 
     world_order_.erase(std::remove(world_order_.begin(), world_order_.end(), world), world_order_.end());
     bool was_main = (main_ == world);
-    worlds_owned_.erase(it); // world is destroyed here
+
+    // Swap-to-back + pop_back, not erase(it) — erase() in the middle of a
+    // vector<unique_ptr<T>> needs to move-assign every trailing element
+    // left by one slot; MSVC's STL takes a stricter internal exception-
+    // safety code path for that than libstdc++ does and fails referencing
+    // unique_ptr's (always-deleted, regardless of T) copy-assignment
+    // operator, even though only a move is ever actually needed. Order
+    // doesn't matter here — world_order_ (already updated above) is the
+    // vector that actually preserves presentation/iteration order — so
+    // swap-to-back sidesteps the whole class of portability issue with a
+    // single, unambiguous move-assignment instead.
+    std::swap(*it, worlds_owned_.back());
+    worlds_owned_.pop_back(); // world is destroyed here
 
     if (was_main)
         main_ = world_order_.empty() ? nullptr : world_order_.front();
