@@ -108,6 +108,14 @@ public:
     /// any of them.
     void release_all();
 
+    /// Calls tick(delta) on every currently-initialised Global subsystem
+    /// whose wants_tick() returned true at registration time, in boot
+    /// order. A no-op before boot()/after shutdown() (nothing is
+    /// initialised). The host integration is responsible for calling this
+    /// once per frame — see Godot-Game-Framework's SubsystemTicker for the
+    /// Godot-side driver.
+    void tick_all(double delta);
+
     int global_subsystem_count() const;
     Subsystem *get_global_subsystem(std::type_index type) const;
     template <typename T>
@@ -118,6 +126,14 @@ public:
     /// Index-based access for iteration (dock/debug UI, tests) — order
     /// matches the boot order once booted, registration order beforehand.
     Subsystem *get_global_subsystem_at(int index) const;
+    /// Manually initializes a StartMode::OnDemand (or, in principle,
+    /// already-surviving) subsystem that boot() left uninitialized — the
+    /// engine-agnostic counterpart to a dev calling e.g.
+    /// SteamApi::InitialiseClient() themselves, or a user flipping a
+    /// subsystem on from an editor UI. Returns false if index is invalid
+    /// or the subsystem is already initialised (not an error — idempotent
+    /// no-op, same spirit as do_initialize() itself).
+    bool initialize_global_subsystem_at(int index);
 
     /// Registers a World-scoped subsystem TYPE (not an instance) — every
     /// World gets its own freshly-constructed instance of every type

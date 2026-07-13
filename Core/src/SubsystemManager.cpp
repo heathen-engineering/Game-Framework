@@ -62,8 +62,17 @@ void SubsystemManager::boot()
         [](const Entry &e) { return e.type; },
         [](const Entry &e) { return e.subsystem->depends_on(); });
 
+    // OnDemand survives should_create() (it isn't Disabled) but does NOT
+    // get auto-initialized here — matches Unity-Game-Framework's StartMode
+    // semantics: constructed and lifecycle-managed, but the actual
+    // activation is left to an explicit later call (initialize_at()), e.g.
+    // a dev calling SteamApi::InitialiseClient() themselves, or a user
+    // flipping it on from the Subsystems settings tab.
     for (Entry &e : entries_)
-        e.subsystem->do_initialize();
+    {
+        if (e.subsystem->start_mode() == Subsystem::StartMode::Automatic)
+            e.subsystem->do_initialize();
+    }
 
     // Only after every other Global subsystem is up — matches
     // Unity-Game-Framework's GameFramework.Boot() ordering guarantee, so
@@ -94,6 +103,15 @@ void SubsystemManager::release_all()
     world_factories_.clear();
 }
 
+void SubsystemManager::tick_all(double delta)
+{
+    for (Entry &e : entries_)
+    {
+        if (e.subsystem->is_initialised() && e.subsystem->wants_tick())
+            e.subsystem->tick(delta);
+    }
+}
+
 int SubsystemManager::global_subsystem_count() const
 {
     return int(entries_.size());
@@ -114,6 +132,15 @@ Subsystem *SubsystemManager::get_global_subsystem_at(int index) const
     if (index < 0 || index >= int(entries_.size()))
         return nullptr;
     return entries_[size_t(index)].subsystem.get();
+}
+
+bool SubsystemManager::initialize_global_subsystem_at(int index)
+{
+    Subsystem *sys = get_global_subsystem_at(index);
+    if (sys == nullptr || sys->is_initialised())
+        return false;
+    sys->do_initialize();
+    return true;
 }
 
 void SubsystemManager::register_world_subsystem_factory(std::type_index type, std::function<std::unique_ptr<Subsystem>()> factory)

@@ -135,6 +135,23 @@ public:
     /// A list of human-readable health issue strings. Empty means healthy.
     virtual std::vector<std::string> health_issues() const { return {}; }
 
+    /// Opt-in per-frame update — SubsystemManager::tick_all() skips calling
+    /// tick() on any subsystem where this returns false, so a subsystem
+    /// that never needs one pays nothing beyond the wants_tick() check
+    /// itself. Deliberately a single
+    /// engine-loop-equivalent granularity (matching Godot's own _process),
+    /// not a port of Unity-Game-Framework's six-phase PlayerLoop-injection
+    /// SubsystemTicker (Before/On/AfterFixed, Before/On/AfterUpdate) — that
+    /// relies on Unity-specific low-level PlayerLoop surgery with no Godot
+    /// (or generic engine-agnostic) equivalent. A fixed-timestep
+    /// physics_tick() counterpart is a straightforward future addition,
+    /// same shape, if a subsystem ever actually needs it; nothing does yet.
+    virtual bool wants_tick() const { return false; }
+    /// Called by SubsystemManager::tick_all() once per frame, only while
+    /// is_initialised() and only if wants_tick() returned true when this
+    /// subsystem was booted.
+    virtual void tick(double delta) { (void)delta; }
+
 protected:
     virtual void initialize() {}
     virtual void deinitialize() {}
